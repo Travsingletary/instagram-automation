@@ -1,4 +1,4 @@
-# main.py - Multi-Platform Social Media Automation for Lovable/Render
+# main.py - Enhanced Multi-Platform Automation with Google Gemini AI
 import requests
 import json
 import os
@@ -6,168 +6,116 @@ import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import logging
+import google.generativeai as genai
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get webhook URL from environment variable
+# Environment variables
 WEBHOOK_URL = os.environ.get('ZAPIER_WEBHOOK_URL', 'https://hooks.zapier.com/hooks/catch/17245945/u6zbdbj/')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
-class MultiPlatformContentGenerator:
+# Configure Gemini with the latest model
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.0-flash-exp')  # Using the latest model
+else:
+    logger.warning("GEMINI_API_KEY not found. Using template-based generation as fallback.")
+    model = None
+
+class GeminiContentGenerator:
     def __init__(self):
-        # Platform-specific content templates optimized for each social network
-        self.platform_templates = {
+        self.model = model
+        
+        # Platform-specific guidelines for AI prompts
+        self.platform_guidelines = {
             "instagram": {
-                "new-release": [
-                    "🎵 Just dropped something special for you all! {context}. What do you hear when you listen? Drop a comment and let me know which part hits different for you! 🔥\n\nStream it now - link in bio!",
-                    "New music alert! 🚨 {context} is finally here and I'm beyond excited to share this with you. This track represents exactly where I am right now as an artist.\n\nWhat's your first impression? Let me know! 🎶"
-                ],
-                "studio-session": [
-                    "Late night studio vibes hitting different ✨ {context}. Sometimes the magic happens when you least expect it.\n\nThis is where the real work happens - behind the scenes, finding that perfect sound.\n\nWhat's your creative space look like? Show me! 👇"
-                ],
-                "fan-appreciation": [
-                    "Y'all are absolutely incredible 🙏 {context}. Seeing your support, hearing you connect with the music - this is why I do what I do.\n\nYou're not just fans, you're family. What's your favorite track right now? ❤️"
-                ]
+                "max_length": 2200,
+                "optimal_length": 125,
+                "style": "engaging, visual-focused, storytelling",
+                "cta_required": True,
+                "hashtag_limit": 30,
+                "emojis": "encouraged"
             },
             "tiktok": {
-                "new-release": [
-                    "POV: You just dropped your best track yet 🎵 {context} #NewMusic #MusicTok #ArtistLife",
-                    "When the song you've been working on for months finally drops... {context} ✨ #MusicProducer #NewRelease #Viral"
-                ],
-                "studio-session": [
-                    "Studio sessions at 3am hit different 🎛️ {context} #StudioLife #MusicMaking #BehindTheScenes #Producer",
-                    "When inspiration strikes in the studio... {context} 🔥 #MusicProcess #Recording #Creative"
-                ],
-                "fan-appreciation": [
-                    "Y'all really said 'we see you' 🥺 {context} #Grateful #MusicFamily #Blessed #Artist",
-                    "The support has been UNREAL lately 💫 {context} #ThankYou #MusicCommunity #Love"
-                ]
+                "max_length": 150,
+                "optimal_length": 100,
+                "style": "punchy, viral, trending",
+                "cta_required": True,
+                "hashtag_limit": 10,
+                "emojis": "essential"
             },
             "twitter": {
-                "new-release": [
-                    "🎵 NEW MUSIC OUT NOW! {context} - this one's been brewing for a while and I'm finally ready to share it with the world. What do you think?",
-                    "JUST DROPPED: {context} 🚨 Been working on this for months. Hope it hits as hard for you as it does for me 🔥"
-                ],
-                "studio-session": [
-                    "4am studio sessions are where the magic happens ✨ {context} #StudioLife",
-                    "Currently: {context} and questioning all my life choices but in the best way 😅 #MusicProducer"
-                ],
-                "fan-appreciation": [
-                    "Still can't believe the support lately 🙏 {context} - you all are the reason I keep creating",
-                    "Grateful is an understatement 💜 {context} #MusicFamily"
-                ]
+                "max_length": 280,
+                "optimal_length": 240,
+                "style": "concise, witty, conversational",
+                "cta_required": False,
+                "hashtag_limit": 5,
+                "emojis": "moderate"
             },
             "facebook": {
-                "new-release": [
-                    "I'm excited to share my latest track with you all! {context}. This song has been a labor of love, and I can't wait for you to experience the journey it takes you on.\n\nMusic has always been my way of connecting with people, and this track is no exception. Let me know what you think in the comments!",
-                    "New music is here! 🎵 {context} represents a new chapter in my artistic journey. I've poured my heart into every note, every lyric, every beat.\n\nThank you for being part of this incredible journey with me. Your support means everything."
-                ],
-                "studio-session": [
-                    "Taking you behind the scenes today! {context}. There's something magical about the creative process - those late nights, the moments of inspiration, the challenges that push you to grow as an artist.\n\nWhat does your creative process look like? I'd love to hear about it!",
-                    "Studio life update: {context}. The creative process is never linear, but that's what makes it beautiful. Every session brings new discoveries, new sounds, new possibilities."
-                ],
-                "fan-appreciation": [
-                    "I want to take a moment to express my genuine gratitude. {context}. Every like, every share, every comment - it all matters more than you know.\n\nMusic is meant to be shared, and having a community like this makes every song worth creating. Thank you for being part of this journey.",
-                    "Feeling incredibly blessed today. {context}. This community we've built together is something special, and I don't take it for granted.\n\nYour support not only helps me as an artist but inspires me to keep pushing boundaries and creating music that matters."
-                ]
+                "max_length": 63206,
+                "optimal_length": 400,
+                "style": "community-focused, detailed, personal",
+                "cta_required": True,
+                "hashtag_limit": 10,
+                "emojis": "selective"
             },
             "linkedin": {
-                "new-release": [
-                    "Excited to share my latest music release! {context}. As an independent artist, every release is both a creative milestone and a business achievement.\n\nThe music industry continues to evolve, and I'm grateful for platforms that allow artists to connect directly with their audience. #MusicBusiness #IndependentArtist",
-                    "New music is live! {context}. Behind every song is months of creative work, collaboration, and strategic planning.\n\nFor fellow creatives and entrepreneurs: what's your approach to launching new projects? #CreativeEntrepreneur #MusicIndustry"
-                ],
-                "studio-session": [
-                    "Behind the scenes of music production: {context}. The creative process requires both artistic vision and technical execution.\n\nEvery studio session is a lesson in project management, creative problem-solving, and collaboration. #MusicProduction #CreativeProcess",
-                    "Studio insights: {context}. Building a music career involves constant learning and adaptation.\n\nThe intersection of creativity and technology continues to shape how we create and share music. #MusicTech #Innovation"
-                ],
-                "fan-appreciation": [
-                    "Reflecting on recent milestones: {context}. Building a sustainable music career is only possible with genuine community support.\n\nGrateful for everyone who has been part of this journey - from industry professionals to dedicated listeners. #MusicCommunity #Entrepreneurship",
-                    "Community update: {context}. Success in the creative industries is built on authentic relationships and consistent value creation.\n\nThank you to everyone who continues to support independent artistry. #IndependentArtist #Community"
-                ]
+                "max_length": 3000,
+                "optimal_length": 300,
+                "style": "professional, industry-focused, educational",
+                "cta_required": False,
+                "hashtag_limit": 5,
+                "emojis": "minimal"
             }
         }
         
-        # Platform-specific hashtag strategies
-        self.platform_hashtags = {
-            "instagram": {
-                "base": ["music", "artist", "musician", "newmusic", "songwriter", "producer"],
-                "genre_tags": {
-                    "hip-hop": ["hiphop", "rap", "bars", "flow", "beats", "newrap"],
-                    "pop": ["popmusic", "newpop", "mainstream", "catchy", "radio"],
-                    "r&b": ["rnb", "soul", "smooth", "vocals", "rhythm"],
-                    "indie": ["indiemusic", "independent", "alternative", "newartist"],
-                    "electronic": ["electronic", "edm", "synth", "producer", "beats"],
-                    "rock": ["rockmusic", "guitar", "alternative", "livemusic"]
-                }
-            },
-            "tiktok": {
-                "base": ["music", "musictok", "artist", "newmusic", "viral", "fyp"],
-                "genre_tags": {
-                    "hip-hop": ["hiphoptok", "rap", "bars", "flow", "beats"],
-                    "pop": ["poptok", "popmusic", "catchy", "mainstream"],
-                    "r&b": ["rnbtok", "soul", "vocals", "smooth"],
-                    "indie": ["indietok", "independent", "alternative"],
-                    "electronic": ["edm", "electronictok", "synth", "producer"],
-                    "rock": ["rocktok", "guitar", "alternative"]
-                }
-            },
-            "twitter": {
-                "base": ["Music", "NewMusic", "Artist", "Musician"],
-                "genre_tags": {
-                    "hip-hop": ["HipHop", "Rap", "Beats"],
-                    "pop": ["PopMusic", "Pop"],
-                    "r&b": ["RnB", "Soul"],
-                    "indie": ["IndieMusic", "Independent"],
-                    "electronic": ["Electronic", "EDM"],
-                    "rock": ["Rock", "Guitar"]
-                }
-            },
-            "facebook": {
-                "base": ["music", "newmusic", "artist"],
-                "genre_tags": {
-                    "hip-hop": ["hiphop", "rap"],
-                    "pop": ["pop", "popmusic"],
-                    "r&b": ["rnb", "soul"],
-                    "indie": ["indie", "independent"],
-                    "electronic": ["electronic", "edm"],
-                    "rock": ["rock", "livemusic"]
-                }
-            },
-            "linkedin": {
-                "base": ["Music", "CreativeIndustry", "MusicBusiness", "IndependentArtist"],
-                "genre_tags": {
-                    "hip-hop": ["HipHop", "MusicProduction"],
-                    "pop": ["PopMusic", "MusicIndustry"],
-                    "r&b": ["RnB", "SoulMusic"],
-                    "indie": ["IndieMusic", "CreativeEntrepreneur"],
-                    "electronic": ["ElectronicMusic", "MusicTech"],
-                    "rock": ["RockMusic", "LiveMusic"]
-                }
-            }
+        # Fallback templates if Gemini is unavailable
+        self.fallback_templates = {
+            "new-release": [
+                "🎵 Just dropped something special! {context}. What do you think of this new direction? Let me know in the comments! 🔥",
+                "New music alert! 🚨 {context} is finally here. This track means everything to me right now. Hope it resonates with you too! ✨"
+            ],
+            "studio-session": [
+                "Late night studio vibes 🎛️ {context}. The creative process never stops, and tonight's session was pure magic. What fuels your creativity? 👇",
+                "Back in the lab! {context}. Sometimes the best ideas come at the most unexpected times. Stay tuned for what's brewing! 🎶"
+            ],
+            "fan-appreciation": [
+                "Y'all are incredible! 🙏 {context}. Your support keeps me going every single day. What's your favorite track right now? ❤️",
+                "Feeling so grateful today 💫 {context}. This community we've built is everything. Thank you for being on this journey with me! 🌟"
+            ],
+            "behind-scenes": [
+                "Behind the curtain 🎬 {context}. Not everything makes it to the final cut, but these moments are just as important. What would you like to see more of? 📸",
+                "Raw creative moments 📹 {context}. The journey is just as beautiful as the destination. Share your creative process below! 💭"
+            ]
         }
         
-        # Platform-specific character limits and optimization
-        self.platform_specs = {
-            "instagram": {"max_caption": 2200, "optimal_caption": 125, "max_hashtags": 30},
-            "tiktok": {"max_caption": 150, "optimal_caption": 100, "max_hashtags": 10},
-            "twitter": {"max_caption": 280, "optimal_caption": 240, "max_hashtags": 5},
-            "facebook": {"max_caption": 63206, "optimal_caption": 400, "max_hashtags": 10},
-            "linkedin": {"max_caption": 3000, "optimal_caption": 300, "max_hashtags": 5}
+        # Genre-specific hashtag strategies  
+        self.genre_hashtags = {
+            "hip-hop": ["hiphop", "rap", "bars", "flow", "beats", "newrap", "undergroundhiphop"],
+            "pop": ["popmusic", "newpop", "mainstream", "radio", "charts", "catchy", "newmusic"],
+            "r&b": ["rnb", "soul", "smooth", "vocals", "rhythm", "newrnb", "soulmusic"],
+            "indie": ["indiemusic", "independent", "alternative", "newartist", "undiscovered", "original"],
+            "electronic": ["electronic", "edm", "synth", "beats", "dance", "producer", "newedm"],
+            "rock": ["rockmusic", "guitar", "drums", "alternative", "newrock", "livemusic"]
         }
+        
+        self.universal_hashtags = ["newmusic", "artist", "musician", "music", "originalmusic", "songwriter", "producer"]
     
     def create_artist_profile(self, artist_id: str, stage_name: str, genre: str, brand_voice: str) -> Dict:
-        """Create a comprehensive artist profile for multi-platform posting"""
+        """Create a comprehensive artist profile"""
         return {
             "artist_id": artist_id,
             "stage_name": stage_name,
             "genre": genre,
             "brand_voice": brand_voice,
-            "platforms": ["instagram", "tiktok", "twitter", "facebook", "linkedin"],  # All Buffer-supported platforms
+            "platforms": ["instagram", "tiktok", "twitter", "facebook", "linkedin"],
             "hashtag_strategy": {
                 platform: {
                     "brand": [f"{stage_name.lower().replace(' ', '')}music", f"{genre}artist"],
-                    "genre": self.platform_hashtags[platform]["genre_tags"].get(genre.lower(), ["music"])
+                    "genre": self.genre_hashtags.get(genre.lower(), ["music"])
                 }
                 for platform in ["instagram", "tiktok", "twitter", "facebook", "linkedin"]
             },
@@ -180,72 +128,102 @@ class MultiPlatformContentGenerator:
             }
         }
     
-    def generate_platform_content(self, platform: str, theme: str, context: str, artist_profile: Dict) -> Dict:
-        """Generate content optimized for a specific platform"""
+    def generate_ai_content(self, platform: str, theme: str, context: str, artist_profile: Dict) -> str:
+        """Generate content using Google Gemini AI"""
         
-        # Get platform-specific template
-        templates = self.platform_templates[platform].get(theme, [f"Working on something special! {context}"])
+        if not self.model:
+            # Fallback to template-based generation
+            return self._generate_fallback_content(theme, context, artist_profile["brand_voice"])
+        
+        try:
+            guidelines = self.platform_guidelines[platform]
+            
+            # Construct detailed prompt for Gemini
+            prompt = f"""
+            Create a {platform} post for a {artist_profile['genre']} music artist named {artist_profile['stage_name']}.
+            
+            ARTIST PROFILE:
+            - Name: {artist_profile['stage_name']}
+            - Genre: {artist_profile['genre']}
+            - Brand Voice: {artist_profile['brand_voice']} (adapt writing style accordingly)
+            
+            POST REQUIREMENTS:
+            - Theme: {theme}
+            - Context: {context}
+            - Platform: {platform}
+            - Style: {guidelines['style']}
+            - Maximum Length: {guidelines['max_length']} characters
+            - Optimal Length: {guidelines['optimal_length']} characters
+            - {"Include a call-to-action" if guidelines['cta_required'] else "No call-to-action required"}
+            - Emoji Usage: {guidelines['emojis']}
+            
+            BRAND VOICE GUIDELINES:
+            - Energetic: Use exciting language, exclamation points, power words, create urgency and enthusiasm
+            - Introspective: Be thoughtful, ask meaningful questions, share deeper insights, use contemplative tone
+            - Rebellious: Challenge conventions, use bold statements, authentic raw expression, push boundaries
+            - Playful: Include humor, wordplay, casual language, fun personality, lighthearted approach
+            
+            PLATFORM-SPECIFIC REQUIREMENTS:
+            - Instagram: Visual storytelling, behind-the-scenes feel, community engagement
+            - TikTok: Trend-aware, quick hooks, viral potential, youth-focused language
+            - Twitter: Concise thoughts, conversational, real-time feel, newsworthy angle
+            - Facebook: Community building, longer storytelling, personal connection
+            - LinkedIn: Professional insights, industry perspective, career/business angle
+            
+            CONTENT THEMES:
+            - new-release: Announce new music, build excitement, share the story behind the song
+            - studio-session: Behind-the-scenes creative process, work-in-progress updates, artistic journey
+            - fan-appreciation: Thank supporters, celebrate community, acknowledge audience impact
+            - behind-scenes: Authentic moments, creative process, personal insights, vulnerability
+            
+            Generate ONLY the caption text. Do not include hashtags (they'll be added separately).
+            Make it authentic to the artist's voice while optimized for {platform}'s audience and algorithm.
+            """
+            
+            # Generate content with Gemini
+            response = self.model.generate_content(prompt)
+            generated_text = response.text.strip()
+            
+            # Validate and optimize length
+            if len(generated_text) > guidelines['max_length']:
+                # Truncate intelligently at sentence boundaries
+                sentences = generated_text.split('.')
+                truncated = ""
+                for sentence in sentences:
+                    if len(truncated + sentence + ".") <= guidelines['max_length'] - 10:
+                        truncated += sentence + "."
+                    else:
+                        break
+                generated_text = truncated.strip()
+            
+            logger.info(f"✅ Generated AI content for {artist_profile['stage_name']} on {platform}")
+            return generated_text
+            
+        except Exception as e:
+            logger.error(f"❌ Gemini AI generation failed: {e}. Using fallback.")
+            return self._generate_fallback_content(theme, context, artist_profile["brand_voice"])
+    
+    def _generate_fallback_content(self, theme: str, context: str, brand_voice: str) -> str:
+        """Fallback template-based generation if AI fails"""
+        templates = self.fallback_templates.get(theme, ["Working on something special! {context} 🎵"])
         base_caption = random.choice(templates).format(context=context)
         
         # Apply brand voice adjustments
-        caption = self.apply_brand_voice(base_caption, artist_profile["brand_voice"], platform)
+        if brand_voice == "energetic":
+            base_caption = base_caption.replace(".", "!").replace("?", "?!")
+        elif brand_voice == "introspective":
+            base_caption = base_caption.replace("!", ".")
+        elif brand_voice == "playful" and "😄" not in base_caption:
+            base_caption += " 😄"
         
-        # Generate platform-optimized hashtags
-        hashtags = self.generate_platform_hashtags(platform, artist_profile, theme)
-        
-        # Apply platform-specific optimization
-        optimized_caption = self.optimize_for_platform(caption, platform)
-        
-        return {
-            "platform": platform,
-            "caption": optimized_caption,
-            "hashtags": hashtags,
-            "character_count": len(optimized_caption),
-            "hashtag_count": len(hashtags)
-        }
-    
-    def apply_brand_voice(self, caption: str, brand_voice: str, platform: str) -> str:
-        """Apply artist's brand voice with platform considerations"""
-        
-        voice_adjustments = {
-            "energetic": {
-                "instagram": lambda c: c.replace(".", "!").replace("?", "?!"),
-                "tiktok": lambda c: c.upper() if len(c) < 50 else c.replace(".", "!"),
-                "twitter": lambda c: c.replace("amazing", "AMAZING").replace("incredible", "INCREDIBLE"),
-                "facebook": lambda c: c.replace(".", "!"),
-                "linkedin": lambda c: c.replace("excited", "thrilled")
-            },
-            "introspective": {
-                "instagram": lambda c: c.replace("!", "."),
-                "tiktok": lambda c: c.replace("!", "..."),
-                "twitter": lambda c: c.lower().replace("!", "."),
-                "facebook": lambda c: c,
-                "linkedin": lambda c: c.replace("feel", "reflect on")
-            },
-            "rebellious": {
-                "instagram": lambda c: c.replace("amazing", "wild").replace("incredible", "insane"),
-                "tiktok": lambda c: c.replace("good", "fire").replace("great", "sick"),
-                "twitter": lambda c: c.replace("nice", "dope"),
-                "facebook": lambda c: c.replace("traditional", "conventional"),
-                "linkedin": lambda c: c.replace("different", "innovative")
-            },
-            "playful": {
-                "instagram": lambda c: c + " 😄" if "😄" not in c else c,
-                "tiktok": lambda c: c + " 😂" if "😂" not in c else c,
-                "twitter": lambda c: c + " 😊" if "😊" not in c else c,
-                "facebook": lambda c: c + " 🙂" if "🙂" not in c else c,
-                "linkedin": lambda c: c + " 😊" if "😊" not in c else c
-            }
-        }
-        
-        platform_adjustment = voice_adjustments.get(brand_voice, {}).get(platform)
-        return platform_adjustment(caption) if platform_adjustment else caption
+        return base_caption
     
     def generate_platform_hashtags(self, platform: str, artist_profile: Dict, theme: str) -> List[str]:
-        """Generate hashtags optimized for specific platform"""
+        """Generate strategic hashtags for each platform"""
+        guidelines = self.platform_guidelines[platform]
+        max_tags = guidelines["hashtag_limit"]
         
         hashtags = []
-        max_tags = self.platform_specs[platform]["max_hashtags"]
         
         # Add artist brand hashtags
         brand_tags = artist_profile["hashtag_strategy"][platform]["brand"]
@@ -255,39 +233,21 @@ class MultiPlatformContentGenerator:
         genre_tags = artist_profile["hashtag_strategy"][platform]["genre"]
         hashtags.extend(genre_tags[:3])
         
-        # Add platform base hashtags
-        base_tags = self.platform_hashtags[platform]["base"]
-        hashtags.extend(base_tags[:3])
+        # Add universal music hashtags
+        hashtags.extend(self.universal_hashtags[:3])
         
         # Add theme-specific hashtags
         theme_tags = {
-            "new-release": {
-                "instagram": ["newrelease", "musicdrop", "freshmusic"],
-                "tiktok": ["newmusic", "musicdrop", "viral"],
-                "twitter": ["NewMusic", "MusicDrop"],
-                "facebook": ["newrelease", "music"],
-                "linkedin": ["NewRelease", "MusicLaunch"]
-            },
-            "studio-session": {
-                "instagram": ["studio", "recording", "behindthescenes"],
-                "tiktok": ["studiolife", "musicmaking", "bts"],
-                "twitter": ["Studio", "Recording"],
-                "facebook": ["studio", "musicmaking"],
-                "linkedin": ["StudioWork", "MusicProduction"]
-            },
-            "fan-appreciation": {
-                "instagram": ["grateful", "musicfamily", "blessed"],
-                "tiktok": ["grateful", "thankful", "love"],
-                "twitter": ["Grateful", "ThankYou"],
-                "facebook": ["grateful", "community"],
-                "linkedin": ["Grateful", "Community"]
-            }
+            "new-release": ["newrelease", "musicdrop", "freshmusic"],
+            "studio-session": ["studio", "recording", "behindthescenes"],
+            "fan-appreciation": ["grateful", "musicfamily", "blessed"],
+            "behind-scenes": ["bts", "process", "journey"]
         }
         
-        theme_specific = theme_tags.get(theme, {}).get(platform, ["music"])
+        theme_specific = theme_tags.get(theme, ["music"])
         hashtags.extend(theme_specific[:2])
         
-        # Remove duplicates and limit to platform max
+        # Remove duplicates and limit to platform maximum
         seen = set()
         unique_hashtags = []
         for tag in hashtags:
@@ -297,36 +257,12 @@ class MultiPlatformContentGenerator:
         
         return unique_hashtags[:max_tags]
     
-    def optimize_for_platform(self, caption: str, platform: str) -> str:
-        """Apply platform-specific optimization"""
-        
-        specs = self.platform_specs[platform]
-        
-        # Truncate if too long
-        if len(caption) > specs["max_caption"]:
-            caption = caption[:specs["max_caption"]-3] + "..."
-        
-        # Platform-specific formatting
-        if platform == "twitter":
-            # Remove excessive line breaks for Twitter
-            caption = caption.replace('\n\n', '\n')
-        elif platform == "linkedin":
-            # Add professional spacing for LinkedIn
-            caption = caption.replace('\n', '\n\n')
-        elif platform == "tiktok":
-            # Keep it concise and punchy for TikTok
-            if len(caption) > specs["optimal_caption"]:
-                sentences = caption.split('.')
-                caption = sentences[0] + "."
-        
-        return caption
-    
     def send_to_zapier(self, content_data: Dict) -> bool:
         """Send generated content to Zapier webhook"""
         try:
             response = requests.post(WEBHOOK_URL, json=content_data, timeout=30)
             if response.status_code in [200, 201, 202]:
-                logger.info(f"✅ Content sent to Zapier successfully for {content_data['platform']}")
+                logger.info(f"✅ Content sent to Zapier for {content_data['platform']}")
                 return True
             else:
                 logger.error(f"❌ Zapier webhook failed for {content_data['platform']}: {response.status_code}")
@@ -336,16 +272,21 @@ class MultiPlatformContentGenerator:
             return False
     
     def create_multi_platform_campaign(self, artist_profile: Dict, theme: str, context: str) -> List[Dict]:
-        """Generate content for all platforms and send to Zapier"""
+        """Generate AI-powered content for all platforms"""
         
         campaign_results = []
         
+        logger.info(f"🤖 Generating AI content for {artist_profile['stage_name']} - {theme}")
+        
         for platform in artist_profile["platforms"]:
             try:
-                # Generate platform-specific content
-                platform_content = self.generate_platform_content(platform, theme, context, artist_profile)
+                # Generate AI-powered content for this platform
+                ai_caption = self.generate_ai_content(platform, theme, context, artist_profile)
                 
-                # Calculate optimal posting time for this platform
+                # Generate platform-optimized hashtags
+                hashtags = self.generate_platform_hashtags(platform, artist_profile, theme)
+                
+                # Calculate optimal posting time
                 base_time = datetime.now()
                 optimal_time_str = artist_profile["optimal_posting_times"][platform]
                 hour, minute = map(int, optimal_time_str.split(':'))
@@ -354,20 +295,21 @@ class MultiPlatformContentGenerator:
                 if posting_time <= base_time:
                     posting_time += timedelta(days=1)
                 
-                # Create comprehensive webhook payload
+                # Create webhook payload
                 webhook_data = {
                     "content_id": f"{artist_profile['artist_id']}_{platform}_{theme}_{int(base_time.timestamp())}",
                     "artist_id": artist_profile["artist_id"],
                     "artist_name": artist_profile["stage_name"],
                     "platform": platform,
-                    "caption": platform_content["caption"],
-                    "hashtags": platform_content["hashtags"],
+                    "caption": ai_caption,
+                    "hashtags": hashtags,
                     "scheduled_time": posting_time.isoformat(),
                     "theme": theme,
                     "context": context,
+                    "generation_method": "gemini_ai" if self.model else "template_fallback",
                     "generation_time": base_time.isoformat(),
-                    "character_count": platform_content["character_count"],
-                    "hashtag_count": platform_content["hashtag_count"],
+                    "character_count": len(ai_caption),
+                    "hashtag_count": len(hashtags),
                     "brand_voice": artist_profile["brand_voice"],
                     "genre": artist_profile["genre"]
                 }
@@ -378,11 +320,13 @@ class MultiPlatformContentGenerator:
                 campaign_results.append({
                     "platform": platform,
                     "success": success,
-                    "content": platform_content,
-                    "posting_time": posting_time.isoformat()
+                    "caption": ai_caption[:100] + "..." if len(ai_caption) > 100 else ai_caption,
+                    "hashtags": hashtags,
+                    "posting_time": posting_time.isoformat(),
+                    "character_count": len(ai_caption)
                 })
                 
-                logger.info(f"{'✅' if success else '❌'} {platform.title()}: {platform_content['caption'][:50]}...")
+                logger.info(f"{'✅' if success else '❌'} {platform.title()}: {ai_caption[:50]}...")
                 
             except Exception as e:
                 logger.error(f"❌ Failed to create content for {platform}: {e}")
@@ -395,8 +339,8 @@ class MultiPlatformContentGenerator:
         return campaign_results
 
 def create_sample_artists():
-    """Create sample artist profiles for multi-platform posting"""
-    generator = MultiPlatformContentGenerator()
+    """Create sample artist profiles for AI content generation"""
+    generator = GeminiContentGenerator()
     
     artists = [
         generator.create_artist_profile("alex_rivers", "Alex Rivers", "indie", "introspective"),
@@ -407,22 +351,43 @@ def create_sample_artists():
     
     return artists
 
-def run_daily_multi_platform_campaign():
-    """Generate and post content across all platforms for all artists"""
-    logger.info("🚀 Starting daily multi-platform campaign...")
+def run_ai_content_campaign():
+    """Generate AI-powered content for all artists across all platforms"""
+    logger.info("🚀 Starting AI-powered multi-platform campaign...")
     
-    generator = MultiPlatformContentGenerator()
+    if not GEMINI_API_KEY:
+        logger.warning("⚠️ GEMINI_API_KEY not set. Using template fallback mode.")
+    else:
+        logger.info("🤖 Gemini AI configured and ready!")
+    
+    generator = GeminiContentGenerator()
     artists = create_sample_artists()
     
-    # Rotate through different themes
+    # Varied content themes for more diverse posting
     themes = ["new-release", "studio-session", "fan-appreciation", "behind-scenes"]
     
-    # Context examples for variety
+    # Rich context examples for AI to work with
     context_examples = {
-        "new-release": ["my latest single", "this new track I've been working on", "something special I just finished"],
-        "studio-session": ["late night recording", "new material in progress", "experimenting with fresh sounds"],
-        "fan-appreciation": ["reaching 5K followers", "incredible support lately", "amazing response to my music"],
-        "behind-scenes": ["my songwriting process", "studio setup tour", "creative journey updates"]
+        "new-release": [
+            "my latest single 'Midnight Dreams' featuring ethereal vocals and atmospheric production",
+            "this emotional ballad I wrote during quarantine about finding hope in darkness",
+            "an upbeat anthem about self-discovery and breaking free from limitations"
+        ],
+        "studio-session": [
+            "late night recording session experimenting with vintage analog equipment",
+            "collaborating with a Grammy-winning producer on my upcoming EP",
+            "layering harmonies and perfecting the bridge section of my next hit"
+        ],
+        "fan-appreciation": [
+            "reaching 10K monthly listeners on Spotify thanks to your incredible support",
+            "seeing fans sing along to my songs at last weekend's intimate acoustic show",
+            "receiving heartfelt messages about how my music helped people through tough times"
+        ],
+        "behind-scenes": [
+            "the creative process behind my latest music video shoot in downtown LA",
+            "songwriting inspiration from a 3am walk through the city streets",
+            "the story behind the cryptic lyrics in my most personal song yet"
+        ]
     }
     
     total_posts = 0
@@ -432,44 +397,55 @@ def run_daily_multi_platform_campaign():
         theme = random.choice(themes)
         context = random.choice(context_examples[theme])
         
-        logger.info(f"\n🎵 Creating campaign for {artist['stage_name']} - {theme}")
+        logger.info(f"\n🎵 Creating AI campaign for {artist['stage_name']} - {theme}")
+        logger.info(f"📝 Context: {context}")
         
-        # Create content for all platforms
+        # Generate AI content for all platforms
         results = generator.create_multi_platform_campaign(artist, theme, context)
         
-        # Count results
+        # Log results
         for result in results:
             total_posts += 1
             if result["success"]:
                 successful_posts += 1
+                logger.info(f"  📱 {result['platform']}: {result['character_count']} chars, {len(result['hashtags'])} hashtags")
     
-    logger.info(f"\n🎉 Campaign complete! {successful_posts}/{total_posts} posts successful")
+    logger.info(f"\n🎉 AI Campaign complete!")
+    logger.info(f"📊 Success rate: {successful_posts}/{total_posts} posts")
+    logger.info(f"🤖 Generation method: {'Gemini AI' if GEMINI_API_KEY else 'Template Fallback'}")
     logger.info(f"📱 Platforms: Instagram, TikTok, Twitter, Facebook, LinkedIn")
     
     return successful_posts, total_posts
 
-def test_single_platform_post():
-    """Test posting to a single platform"""
-    logger.info("🧪 Testing single platform post...")
+def test_ai_generation():
+    """Test AI content generation for a single artist/platform"""
+    logger.info("🧪 Testing AI content generation...")
     
-    generator = MultiPlatformContentGenerator()
+    generator = GeminiContentGenerator()
     artist = generator.create_artist_profile("test_artist", "Test Artist", "pop", "energetic")
     
-    # Test Instagram post
-    content = generator.generate_platform_content("instagram", "new-release", "my debut single", artist)
+    # Test different platforms
+    platforms = ["instagram", "tiktok", "twitter"]
     
-    print(f"\n--- Test Instagram Post ---")
-    print(f"Artist: {artist['stage_name']}")
-    print(f"Caption: {content['caption']}")
-    print(f"Hashtags: {' '.join(['#' + tag for tag in content['hashtags']])}")
-    print(f"Character count: {content['character_count']}")
+    for platform in platforms:
+        print(f"\n--- {platform.title()} Test ---")
+        content = generator.generate_ai_content(
+            platform, 
+            "new-release", 
+            "my debut single 'Electric Dreams' with a futuristic synth-pop sound",
+            artist
+        )
+        hashtags = generator.generate_platform_hashtags(platform, artist, "new-release")
+        
+        print(f"Caption ({len(content)} chars): {content}")
+        print(f"Hashtags: {' '.join(['#' + tag for tag in hashtags])}")
     
-    return content
+    return True
 
 if __name__ == "__main__":
     import sys
     
     if len(sys.argv) > 1 and sys.argv[1] == "test":
-        test_single_platform_post()
+        test_ai_generation()
     else:
-        run_daily_multi_platform_campaign()
+        run_ai_content_campaign()
